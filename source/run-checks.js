@@ -66,4 +66,18 @@ eq(y.an.annual.map(a => [a.name, a.kind, a.year, a.month]), [['ドメイン更�
 tr(!y.an.some.some(s => s.name === 'ドメイン更新'), 'S12 ときどきに出ない'); tr(y.an.some.some(s => s.name === '短い間隔'), 'S12 300日は年払いでない'); tr(y.an.some.some(s => s.name === '額違い'), 'S12 額違いは年払いでない');
 const it2 = X.listItems(s1.an, { [s1.an.monthly[0].key]: 1 }); eq(it2.length, 8, 'S12 毎月キーを手動指定しても増えない');
 eq(X.yen(1199999988), '1,199,999,988円', 'yen'); eq(X.yen(0), '0円', 'yen0');
+// レビュー①の指摘の再現
+const shime = [];
+['2026/07/16','2026/08/03','2026/09/03','2026/10/03'].forEach(d => shime.push(d + ',サブスクA,1000'));
+['2026/07/20','2026/08/20','2026/09/20'].forEach(d => shime.push(d + ',サブスクB,500'));
+['2026/07/25','2026/08/10','2026/08/25','2026/09/10','2026/09/25','2026/10/10','2026/10/15'].forEach((d, i) => shime.push(d + ',買い物' + i + ',300'));
+const sm = run(shime.join('\n'), Date.UTC(2026, 9, 20)); eq(names(sm.an.monthly), ['サブスクA', 'サブスクB'], 'R1 15日締めの明細でも毎月が見つかる'); eq(sm.an.partial.length, 2, 'R1 途中の月を2つ判定から外す');
+const late = run(X.sampleText() + '\n2026/05/28,遅れて載った店,800'); eq(late.an.monthly.length, 8, 'R1 遅れて載った1行で毎月が0件にならない'); eq(late.an.outside, 1, 'R1 期間外1件');
+eq(X.normKey('PAYPAL *NETFLIX') !== X.normKey('PAYPAL *EBAY'), true, 'R3 代行業者*加盟店名は別');
+eq(X.normKey('APPLE.COM/BILL'), 'APPLE.COM/BILL', 'R3 /BILL は残す'); eq(X.normKey('NETNOTE*ZZ9'), 'NETNOTE', 'R3 参照番号は従来どおり');
+const unq = run('ご利用日,ご利用先,ご利用金額\n2026/07/03,ノートクラウド,1,200\n2026/08/03,ノートクラウド,1,200'); eq(unq.b.ok.length, 0, 'R2a 引用符なし1,200は読まない'); tr(/列の数が合わない/.test(unq.b.bad[0].reason), 'R2a 理由');
+const cntcol = run('2026/07/03,ノートクラウド,1200,1\n2026/08/03,ノートクラウド,1200,1\n2026/07/05,素材,3300,1\n2026/08/05,素材,3300,1'); eq(cntcol.det.cols.amt, 2, 'R2b 右端の回数列を金額にしない');
+const holder = run('山田 太郎 様,4980-****-****-1234,ご請求額\n2026/07/03,ノートクラウド,1200\n2026/08/03,ノートクラウド,1200');
+tr(holder.b.bad.every(b => !/1234|山田/.test(b.name)), 'R4 契約者行のカード番号・氏名を出さない ' + JSON.stringify(holder.b.bad));
+eq(holder.an.monthly.length, 1, 'R4 契約者行があっても読める');
 console.log('checks: ' + (n - f) + '/' + n + ' passed'); process.exit(f ? 1 : 0);

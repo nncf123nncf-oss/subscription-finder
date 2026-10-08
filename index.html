@@ -39,6 +39,7 @@
   .ghost, .filebtn { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); font-weight: 600; }
   .btns { display: grid; gap: 8px; margin-top: 8px; }
   .btns2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .btns2 button { padding-inline: 8px; white-space: nowrap; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .hint { font-size: 13px; color: var(--ink3); margin: 6px 0 0; }
   .status { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); font-size: 14px; overflow-wrap: anywhere; }
@@ -72,10 +73,10 @@
   .it .amt { grid-area: amt; display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 2px; font-variant-numeric: tabular-nums; }
   .it .amt span { white-space: nowrap; }
   .it .amt b { font-size: 17px; }
-  .it .bdg { grid-area: bdg; display: flex; flex-wrap: wrap; gap: 6px; }
+  .it .bdg { grid-area: bdg; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .it .bdg span, .tag { font-size: 12px; line-height: 1.5; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--ink2); white-space: nowrap; }
   .it .bdg .ann { border-color: var(--accent); color: var(--accent); font-weight: 700; }
-  .it .rm { grid-area: bdg; justify-self: end; width: auto; min-height: 36px; font-size: 13px; padding: 4px 10px; }
+  .it .bdg .rm { width: auto; min-height: 44px; font-size: 14px; padding: 4px 14px; }
   .sub li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; overflow-wrap: anywhere; }
   .sub li:first-child { border-top: 0; }
   .once { list-style: none; margin: 0; padding: 0; }
@@ -85,6 +86,7 @@
   #manualBox textarea { height: 140px; margin-top: 8px; }
   .layout { display: block; }
   @media (min-width: 880px) {
+    .band .v { font-size: 22px; }
     .layout { display: grid; grid-template-columns: 380px minmax(0,1fr); gap: 20px; align-items: start; }
     .it { grid-template-columns: 44px minmax(0,1fr) auto; grid-template-areas: "chk name amt" "chk bdg amt"; }
     .it .amt { flex-direction: column; align-items: flex-end; text-align: right; }
@@ -116,7 +118,7 @@
       <section class="card" aria-labelledby="hIn">
         <h2 id="hIn">明細を入れる</h2>
         <label class="lb" for="paste">明細の文字を貼る（CSVの中身や、明細画面からコピーした表）</label>
-        <textarea id="paste" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="2000000" placeholder="例: 2026/07/03,ノートクラウド,1200"></textarea>
+        <textarea id="paste" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="例: 2026/07/03,ノートクラウド,1200"></textarea>
         <div class="btns">
           <label class="filebtn" for="file" id="fileLabel">CSVファイルを選ぶ</label>
           <input type="file" id="file" class="vh">
@@ -179,7 +181,7 @@
         </div>
         <ul class="foot-notes">
           <li>年払いは、約13か月分以上の明細があるときだけ自動で見つかります。</li>
-          <li>分割払いも、毎月同じ額として一覧に出ることがあります。</li>
+          <li>分割払いも、毎月同じ額として一覧に出ることがあります（明細の形によっては、分割の総額が毎月の額として出ることもあります。その場合は「列の確認」で毎回の支払額の列を選んでください）。</li>
           <li>支払先の名前の表記が月で違うと、別の行に分かれることがあります。</li>
           <li>明細の期間の途中から・途中までの月は、出ていない月として数えます。</li>
           <li>年の目安は、月額×12（年払いはその金額）の計算です。</li>
@@ -205,7 +207,7 @@ var SBF = (function () {
   function clean(s) { return nk(s).replace(/\s+/g, ' ').trim(); }
 
   function parseTable(text) {
-    text = String(text || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+    text = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
     var lines = text.split('\n').filter(function (l) { return l.trim() !== ''; });
     var tabs = 0, commas = 0;
     lines.slice(0, 50).forEach(function (l) { if (l.indexOf('\t') >= 0) tabs++; if (l.indexOf(',') >= 0) commas++; });
@@ -271,27 +273,35 @@ var SBF = (function () {
     }
     var ratio = function (j, fn) { var ok = 0, all = 0; data.forEach(function (r) { if (r[j] != null && r[j] !== '') { all++; if (fn(r[j])) ok++; } }); return all ? ok / all : 0; };
     if (cols.date < 0) { var best = 0; for (var j = 0; j < n; j++) { var r = ratio(j, looksDate); if (r > best) { best = r; cols.date = j; } } }
-    if (cols.amt < 0) { var bestA = 0; for (j = 0; j < n; j++) { if (j === cols.date) continue; var ra = ratio(j, looksAmount); if (ra > 0 && ra >= bestA) { bestA = ra; cols.amt = j; } } }
+    var med = function (j) { var v = []; data.forEach(function (r) { var a = r[j] != null ? parseAmount(r[j]) : null; if (a && a.v) v.push(a.v); }); v.sort(function (a, b) { return a - b; }); return v.length ? v[v.length >> 1] : 0; };
+    if (cols.amt < 0) { var bestA = 0, bestM = -1; for (j = 0; j < n; j++) { if (j === cols.date) continue; var ra = ratio(j, looksAmount), mj = med(j); if (ra > 0 && (ra > bestA || (ra === bestA && mj > bestM))) { bestA = ra; bestM = mj; cols.amt = j; } } }
+    // 列の数: 見出しがあれば見出しの列数、なければ最も多い列数
+    var width = hr ? hr.length : (function () { var c = {}, b = 0, w = 0; rows.forEach(function (r) { c[r.length] = (c[r.length] || 0) + 1; if (c[r.length] > b) { b = c[r.length]; w = r.length; } }); return w; })();
     if (cols.name < 0) { var bestL = -1; for (j = 0; j < n; j++) { if (j === cols.date || j === cols.amt) continue; var len = 0, cnt = 0; data.forEach(function (r) { if (r[j]) { len += nk(r[j]).length; cnt++; } }); var avg = cnt ? len / cnt : 0; if (ratio(j, looksAmount) < 0.5 && ratio(j, function (x) { return /\p{L}/u.test(nk(x)); }) >= 0.5 && avg > bestL) { bestL = avg; cols.name = j; } } }
-    return { header: header, headerRow: hr, ncol: n, cols: cols };
+    return { header: header, headerRow: hr, ncol: n, width: width, cols: cols, amtMedian: cols.amt >= 0 ? med(cols.amt) : 0 };
   }
 
+  // 参照番号（区切り記号の後ろの、数字を含む英数字）と末尾の4桁以上の数字だけを除く
   function normKey(name) {
     var s = nk(name).toUpperCase().replace(/\s+/g, ' ').trim();
-    var k = s.replace(/\s*[*\/#][A-Z0-9\-]*$/, '').replace(/\s*\d{4,}$/, '').trim();
+    var k = s.replace(/\s*[*\/#](?=[A-Z0-9\-]*\d)[A-Z0-9\-]+$/, '').replace(/\s*\d{4,}$/, '').trim();
     return k || s;
   }
+  // カード番号らしい並び（4桁-4桁…、*を含む）を伏せる
+  function mask(s) { return String(s).replace(/[\d*＊]{4}(?:[-\s]?[\d*＊]{4}){1,3}/g, '****'); }
 
   function buildRecords(rows, det, cols, today) {
     var start = det.header ? 1 : 0, ok = [], bad = [], over = 0;
     for (var i = start; i < rows.length; i++) {
       if (i - start >= MAX_ROWS) { over = rows.length - i; break; }
       var r = rows[i], line = i + 1;
-      var name = cols.name >= 0 && r[cols.name] != null ? clean(r[cols.name]) : '';
-      if (cols.date < 0 || cols.amt < 0 || cols.name < 0) { bad.push({ line: line, name: name, reason: '列が決まっていない' }); continue; }
-      if (r.length <= Math.max(cols.date, cols.amt, cols.name)) { bad.push({ line: line, name: name, reason: '列が足りない' }); continue; }
+      var name = cols.name >= 0 && r[cols.name] != null ? mask(clean(r[cols.name])) : '';
+      // 明細の行でない可能性がある行は、支払先の欄も出さない（契約者情報の行などを画面に出さない）
+      if (cols.date < 0 || cols.amt < 0 || cols.name < 0) { bad.push({ line: line, name: '', reason: '列が決まっていない' }); continue; }
+      if (r.length <= Math.max(cols.date, cols.amt, cols.name)) { bad.push({ line: line, name: '', reason: '列が足りない' }); continue; }
+      if (det.width && r.length > det.width) { bad.push({ line: line, name: '', reason: '列の数が合わない（金額のカンマを " で囲んでいない可能性）' }); continue; }
       var d = parseDate(r[cols.date], today);
-      if (d.err) { bad.push({ line: line, name: name, reason: d.err }); continue; }
+      if (d.err) { bad.push({ line: line, name: /日付が読めない|日付が空欄/.test(d.err) ? '' : name, reason: d.err }); continue; }
       if (!name) { bad.push({ line: line, name: '', reason: '支払先が空欄' }); continue; }
       var a = parseAmount(r[cols.amt]);
       if (a.err) { bad.push({ line: line, name: name, reason: a.err }); continue; }
@@ -307,12 +317,27 @@ var SBF = (function () {
   }
   function analyze(recs) {
     if (!recs.length) return { n: 0, need: true };
-    var minYm = Infinity, maxYm = -Infinity;
-    recs.forEach(function (r) { if (r.ym < minYm) minYm = r.ym; if (r.ym > maxYm) maxYm = r.ym; });
-    var N = maxYm - minYm + 1;
-    var res = { n: N, minYm: minYm, maxYm: maxYm, need: N < 2, monthly: [], annual: [], some: [], once: [] };
+    // 1) 期間: 行の少ない端の月（遅れて載った行など）を外す。月の行数が最多の月の25%未満の端の月を外していく
+    var cnt = {}, mx = 0; recs.forEach(function (r) { cnt[r.ym] = (cnt[r.ym] || 0) + 1; if (cnt[r.ym] > mx) mx = cnt[r.ym]; });
+    var yAll = Object.keys(cnt).map(Number).sort(function (a, b) { return a - b; });
+    var lo = 0, hi = yAll.length - 1, th = Math.max(1, mx * 0.25);
+    while (lo < hi && cnt[yAll[lo]] < th) lo++;
+    while (hi > lo && cnt[yAll[hi]] < th) hi--;
+    var minYm = yAll[lo], maxYm = yAll[hi], N = maxYm - minYm + 1;
+    var inR = recs.filter(function (r) { return r.ym >= minYm && r.ym <= maxYm; });
+    // 2) 端の月が途中から・途中までのとき（締め日が月末でない明細）、その月は「毎月」の判定に使わない
+    var firstDay = Infinity, lastDay = -Infinity;
+    inR.forEach(function (r) { var d = new Date(r.t).getUTCDate(); if (r.ym === minYm && d < firstDay) firstDay = d; if (r.ym === maxYm && d > lastDay) lastDay = d; });
+    var req = []; for (var y = minYm; y <= maxYm; y++) req.push(y);
+    var partial = [];
+    if (N >= 3 && firstDay > 5) { req.shift(); partial.push(minYm); }
+    if (N >= 3 && lastDay < 24) { req.pop(); partial.push(maxYm); }
+    var res = { n: N, minYm: minYm, maxYm: maxYm, need: N < 2, outside: recs.length - inR.length, partial: partial, required: req.length, monthly: [], annual: [], some: [], once: [] };
     if (res.need) return res;
-    var g = {}; recs.forEach(function (r) { (g[r.key] = g[r.key] || []).push(r); });
+    var g = {}; inR.forEach(function (r) { (g[r.key] = g[r.key] || []).push(r); });
+    // 年払いの自動判定は期間の外の行も使う
+    var gAll = {}; recs.forEach(function (r) { (gAll[r.key] = gAll[r.key] || []).push(r); });
+    Object.keys(gAll).forEach(function (k) { if (!g[k]) g[k] = gAll[k]; else if (gAll[k].length > g[k].length && isAnnual(gAll[k].slice().sort(function (a, b) { return a.t - b.t; }))) g[k] = gAll[k]; });
     Object.keys(g).forEach(function (k) {
       var es = g[k].slice().sort(function (a, b) { return a.t - b.t; });
       var last = es[es.length - 1], name = last.name;
@@ -320,8 +345,12 @@ var SBF = (function () {
       var bym = {}; es.forEach(function (e) { bym[e.ym] = (bym[e.ym] || 0) + e.amount; });
       var yms = Object.keys(bym).map(Number).sort(function (a, b) { return a - b; });
       var multi = yms.some(function (y) { return es.filter(function (e) { return e.ym === y; }).length > 1; });
-      var sums = yms.map(function (y) { return bym[y]; });
-      if (yms.length === N) {
+      var inYms = yms.filter(function (y) { return y >= minYm && y <= maxYm; });
+      var allReq = req.every(function (y) { return bym[y] != null; });
+      var sums = req.filter(function (y) { return bym[y] != null; }).map(function (y) { return bym[y]; });
+      if (!allReq || inYms.length === 0) sums = inYms.map(function (y) { return bym[y]; });
+      yms = inYms;
+      if (allReq && req.length >= 2) {
         var same = sums.every(function (v) { return v === sums[0]; });
         var m = same ? sums[sums.length - 1] : Math.round(sums.reduce(function (a, b) { return a + b; }, 0) / sums.length);
         res.monthly.push({ key: k, name: name, kind: same ? 'same' : 'vary', month: m, year: same ? m * 12 : Math.round(sums.reduce(function (a, b) { return a + b; }, 0) / sums.length * 12), present: yms.length, multi: multi });
@@ -404,6 +433,7 @@ var SBF = (function () {
 
   function loadText(text) {
     reset();
+    if (String(text || '').length > 2000000) { status('文字が多すぎます（200万字まで）。期間を分けて入れてください。', true); return; }
     if (!String(text || '').trim()) { status('明細が空です。文字を貼るか、CSVファイルを選んでください。', true); return; }
     var tb = S.parseTable(text);
     if (!tb.rows.length) { status('明細が空です。', true); return; }
@@ -418,6 +448,10 @@ var SBF = (function () {
     var keep = {}; (st.an.once || []).forEach(function (o) { if (st.manual[o.key]) keep[o.key] = 1; }); st.manual = keep;
     if (!b.ok.length) { status('読み取れる行がありませんでした（読み取れなかった行 ' + b.bad.length + '件）。「列の確認」で列を選び直すか、明細の形を確かめてください。', true); $('colBox').open = true; renderBad(); $('res').hidden = false; $('resEmpty').hidden = true; hideMain(true); return; }
     var msg = b.ok.length + '件を読み込み・' + S.ymLabel(st.an.minYm) + '〜' + S.ymLabel(st.an.maxYm) + '（' + st.an.n + 'か月分）・読み取れなかった行 ' + b.bad.length + '件' + (b.over ? '・' + S.MAX_ROWS + '行を超えた ' + b.over + '行は読んでいません' : '');
+    if (st.an.outside) msg += '・期間から外れた月の行 ' + st.an.outside + '件は毎月の判定に使っていません';
+    if (st.an.partial && st.an.partial.length) msg += '・途中から／途中までの月（' + st.an.partial.map(S.ymLabel).join('、') + '）は毎月の判定に使っていません';
+    if (!st.an.need && st.an.required === 2) msg += '。2か月分だと、ふだんの買い物も「毎月」に入りやすくなります。3か月分以上がおすすめです';
+    if (st.det.amtMedian && st.det.amtMedian < 100) { msg += '。金額の列の値が小さいようです。「列の確認」で金額の列が合っているか確かめてください'; $('colBox').open = true; }
     if (st.an.need) { status(msg + '。毎月の支払いを見つけるには、2か月分以上の明細を入れてください。', true); renderBad(); $('res').hidden = false; $('resEmpty').hidden = true; hideMain(true); return; }
     status(msg, false); hideMain(false); render();
   }
@@ -426,7 +460,7 @@ var SBF = (function () {
   function renderBad() {
     var box = $('badBox'), ul = $('badList'); ul.textContent = '';
     box.hidden = !st.bad.length; $('badSum').textContent = '読み取れなかった行 ' + st.bad.length + '件';
-    st.bad.slice(0, 200).forEach(function (b) { var li = el('li'); li.appendChild(document.createTextNode(b.line + '行目 ' + (b.name || '（支払先なし）'))); li.appendChild(el('span', 'why', b.reason)); ul.appendChild(li); });
+    st.bad.slice(0, 200).forEach(function (b) { var li = el('li'); li.appendChild(document.createTextNode(b.line + '行目 ' + (b.name || '（この行の中身は表示しません）'))); li.appendChild(el('span', 'why', b.reason)); ul.appendChild(li); });
     if (st.bad.length > 200) ul.appendChild(el('li', null, 'ほか ' + (st.bad.length - 200) + '件'));
   }
   function render() {
@@ -448,7 +482,7 @@ var SBF = (function () {
       if (!ann) bdg.appendChild(el('span', null, it.present + '/' + st.an.n + 'か月'));
       if (it.kind === 'annual-auto') bdg.appendChild(el('span', null, it.count + '回'));
       if (it.multi) bdg.appendChild(el('span', null, '同じ月に複数回'));
-      if (it.kind === 'annual-manual') { var rm = el('button', 'ghost', '外す'); rm.type = 'button'; rm.style.width = 'auto'; rm.style.minHeight = '32px'; rm.style.padding = '2px 10px'; rm.style.fontSize = '13px'; rm.setAttribute('aria-label', '年払いから外す: ' + it.name); rm.addEventListener('click', function () { delete st.manual[it.key]; delete st.marks[it.key]; render(); }); bdg.appendChild(rm); }
+      if (it.kind === 'annual-manual') { var rm = el('button', 'ghost', '外す'); rm.type = 'button'; rm.className = 'ghost rm'; rm.setAttribute('aria-label', '年払いから外す: ' + it.name); rm.addEventListener('click', function () { delete st.manual[it.key]; delete st.marks[it.key]; render(); }); bdg.appendChild(rm); }
       li.appendChild(bdg); ul.appendChild(li);
     });
     $('noneMsg').hidden = st.items.length > 0;
@@ -489,12 +523,13 @@ var SBF = (function () {
     r.onerror = function () { reset(); status('ファイルを読み込めませんでした。', true); };
     r.onload = function () {
       var u = new Uint8Array(r.result), head = u.subarray(0, 1024);
+      if ((u[0] === 0xFF && u[1] === 0xFE) || (u[0] === 0xFE && u[1] === 0xFF)) { try { $('paste').value = new TextDecoder(u[0] === 0xFF ? 'utf-16le' : 'utf-16be').decode(u).replace(/^\uFEFF/, ''); $('file').value = ''; loadText($('paste').value); } catch (e) { reset(); status('UTF-16の文字ファイルを読めませんでした。', true); } return; }
       var bin = (u[0] === 0x89 && u[1] === 0x50) || (u[0] === 0x50 && u[1] === 0x4B) || (u[0] === 0xFF && u[1] === 0xD8) || (u[0] === 0x25 && u[1] === 0x50 && u[2] === 0x44) || Array.prototype.indexOf.call(head, 0) >= 0;
       if (bin) { reset(); status('文字のファイルではないようです（画像・ZIP・PDFなど）。CSVファイルを選んでください。', true); $('file').value = ''; return; }
       var text;
       try { text = new TextDecoder('utf-8', { fatal: true }).decode(u); }
       catch (e) { try { text = new TextDecoder('shift_jis').decode(u); } catch (e2) { reset(); status('文字コードが読めませんでした。', true); return; } }
-      $('paste').value = text.replace(/^﻿/, ''); $('file').value = '';
+      $('paste').value = text.replace(/^\uFEFF/, ''); $('file').value = '';
       loadText($('paste').value);
     };
     r.readAsArrayBuffer(f);

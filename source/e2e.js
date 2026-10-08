@@ -72,6 +72,7 @@ const wf = (name, buf) => { const p = path.join(TMP, name); fs.writeFileSync(p, 
   await pick(wf('bom.csv', Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from(csv)]))); ok(await cnt('#list .it') === 1 && (await txt('#list')).includes('ノートクラウド'), 'UTF-8 BOM');
   const SJ = Buffer.from('82b29798977093fa2c82b29798977090e62c82b2979897708be08a7a0a323032362f30372f30332c836d815b8367834e8389834583682c313230300a323032362f30382f30332c836d815b8367834e8389834583682c313230300a', 'hex');
   await pick(wf('sjis.csv', SJ)); ok((await txt('#list')).includes('ノートクラウド') && (await txt('#colDate option:checked')).includes('ご利用日'), 'Shift_JIS ' + (await txt('#list')).slice(0, 40));
+  await pick(wf('u16.csv', Buffer.concat([Buffer.from([0xFF, 0xFE]), Buffer.from(csv, 'utf16le')]))); ok((await txt('#list')).includes('ノートクラウド'), 'UTF-16');
   await pick(wf('img.png', Buffer.from([0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0]))); ok((await txt('#status')).includes('文字のファイルではない'), 'PNG拒否');
   await pick(wf('empty.csv', Buffer.alloc(0))); ok((await txt('#status')).includes('空'), '空ファイル');
   await pick(wf('big.csv', Buffer.alloc(2 * 1024 * 1024 + 10, 0x41))); ok((await txt('#status')).includes('2MB'), '2MB超');
@@ -97,7 +98,7 @@ const wf = (name, buf) => { const p = path.join(TMP, name); fs.writeFileSync(p, 
     ok(await ev('getComputedStyle(document.querySelector(".layout")).display') === 'block', '375pxは1カラム');
     const over = await ev(`[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&(r.right>375.5||r.left<-0.5)}).map(e=>e.tagName+'.'+e.className).slice(0,5)`);
     ok(over.length === 0, scheme + ' はみ出し要素なし ' + J(over));
-    const tap = await ev(`[...document.querySelectorAll('button,.filebtn,select,summary,.it .chk')].filter(e=>e.getClientRects().length&&!e.closest('[hidden]')).filter(e=>e.getBoundingClientRect().height<43.5 && !e.closest('.bdg')).map(e=>e.id||e.className||e.tagName)`);
+    const tap = await ev(`[...document.querySelectorAll('button,.filebtn,select,summary,.it .chk')].filter(e=>e.getClientRects().length&&!e.closest('[hidden]')).filter(e=>e.getBoundingClientRect().height<43.5).map(e=>e.id||e.className||e.tagName)`);
     ok(tap.length === 0, scheme + ' タップ領域44px ' + J(tap));
     const lap = await ev(`[...document.querySelectorAll('#list .it')].some(li=>{const a=li.querySelector('.chk').getBoundingClientRect();return [...li.querySelectorAll('.bdg span,.nm')].some(b=>{const r=b.getBoundingClientRect();return !(r.left>=a.right||r.right<=a.left||r.top>=a.bottom||r.bottom<=a.top) && b.className!=='nm'})})`);
     ok(!lap, scheme + ' チェックとバッジの重なりなし');
