@@ -26,7 +26,7 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'sbf-shoot-'));
     const s = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: r.y0, width: w, height: r.y1 - r.y0, scale: 1 } });
     fs.writeFileSync(path.join(OUT, file), Buffer.from(s.result.data, 'base64')); console.log('wrote', file, r, 'h=' + Math.round(r.y1 - r.y0));
   }
-  const addAnnual = 'document.getElementById("sample").click();[...document.querySelectorAll("#onceList li")].find(li=>li.textContent.includes("セキュリティ対策ソフト")).querySelector("button").click()';
+  const addAnnual = 'document.getElementById("sample").click();[...document.querySelectorAll("#onceList li")].find(li=>li.textContent.includes("セキュリティ対策ソフト")).querySelector("button[aria-label^=年払い]").click()';
   const bottom = sel => `document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect().bottom+scrollY`;
   const top = sel => `document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect().top+scrollY`;
   // Card1: デスクトップ1000px・2カラム・サンプル読み込み＋年払いを1件加えた直後（印なし）

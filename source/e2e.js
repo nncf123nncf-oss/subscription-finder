@@ -49,7 +49,7 @@ const wf = (name, buf) => { const p = path.join(TMP, name); fs.writeFileSync(p, 
   ok((await txt('#someSum')).includes('1件'), 'ときどき1件'); ok((await txt('#onceSum')).includes('7件'), '1回だけ7件');
   ok((await ev('[...document.querySelectorAll("#list .nm")].map(e=>e.textContent)')).slice(0, 3).join('|') === '素材ストック*Z1X5|予約うけつけ帳|ノートPC 分割', '並び順');
   // 手動年払い
-  await ev('[...document.querySelectorAll("#onceList li")].find(li=>li.textContent.includes("セキュリティ対策ソフト")).querySelector("button").click()'); await sleep(100);
+  await ev('[...document.querySelectorAll("#onceList li")].find(li=>li.textContent.includes("セキュリティ対策ソフト")).querySelector("button[aria-label^=年払い]").click()'); await sleep(100);
   ok(await cnt('#list .it') === 9, '年払いを加えて9件'); ok((await txt('#list')).includes('年払い（自分で追加）'), '年払いラベル');
   ok((await txt('#tYear')) === '192,820円' && (await txt('#tMonth')) === '16,068円', '年払い込み合計 ' + await txt('#tYear'));
   ok((await ev('[...document.querySelectorAll("#onceList li")].find(li=>li.textContent.includes("セキュリティ対策ソフト")).querySelector("button").disabled')), '加えたボタンは無効');
@@ -76,6 +76,17 @@ const wf = (name, buf) => { const p = path.join(TMP, name); fs.writeFileSync(p, 
   await pick(wf('img.png', Buffer.from([0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0]))); ok((await txt('#status')).includes('文字のファイルではない'), 'PNG拒否');
   await pick(wf('empty.csv', Buffer.alloc(0))); ok((await txt('#status')).includes('空'), '空ファイル');
   await pick(wf('big.csv', Buffer.alloc(2 * 1024 * 1024 + 10, 0x41))); ok((await txt('#status')).includes('2MB'), '2MB超');
+  // 1回だけの支払いを「毎月」として加える
+  await click('#sample'); await sleep(100);
+  const sec = '[...document.querySelectorAll("#onceList li")].find(li=>li.textContent.includes("セキュリティ対策ソフト"))';
+  ok(await ev(sec + '.querySelectorAll("button").length') === 2, '1回だけの行に2つのボタン');
+  await ev(sec + '.querySelector("button[aria-label^=毎月]").click()'); await sleep(100);
+  const secIt = '[...document.querySelectorAll("#list .it")].find(li=>li.textContent.includes("セキュリティ対策ソフト"))';
+  ok(await ev('!!' + secIt) && (await ev(secIt + '.textContent')).includes('毎月（自分で追加）') && (await ev(secIt + '.textContent')).includes('5,500円') && (await ev(secIt + '.textContent')).includes('66,000円') && !(await ev(secIt + '.textContent')).includes('か月'), '毎月として加える: 月5,500円・年66,000円');
+  ok((await txt('#listCount')).startsWith('毎月 9件') && (await txt('#tMonth')) === '21,110円', '毎月として加える: 件数と合計 ' + (await txt('#listCount')) + ' ' + (await txt('#tMonth')));
+  ok((await ev(sec + '.textContent')).includes('毎月の一覧にあります'), '毎月として加えた表示');
+  await ev(secIt + '.querySelector(".rm").click()'); await sleep(100);
+  ok(!(await ev('!!' + secIt)) && (await txt('#tMonth')) === '15,610円' && await ev(sec + '.querySelectorAll("button").length') === 2, '毎月から外すと元に戻る');
   // 複数ファイル（PayPayカードに似た形の架空データ。月ごとに1ファイル、見出し行つき）
   async function pickMany(files) { const doc = (await send('DOM.getDocument')).result.root.nodeId; const q = (await send('DOM.querySelector', { nodeId: doc, selector: '#file' })).result.nodeId; await send('DOM.setFileInputFiles', { nodeId: q, files }); await sleep(700); }
   const PH = '"利用日/キャンセル日","利用店名・商品名","利用者","決済方法","支払区分","利用金額","手数料","支払総額"\n';
@@ -103,7 +114,7 @@ const wf = (name, buf) => { const p = path.join(TMP, name); fs.writeFileSync(p, 
   // ===== 375px =====
   for (const scheme of ['light', 'dark']) {
     await open(375, 800, scheme); await click('#sample'); await sleep(100);
-    await ev('[...document.querySelectorAll("#onceList li")].find(li=>li.textContent.includes("セキュリティ対策ソフト")).querySelector("button").click()');
+    await ev('[...document.querySelectorAll("#onceList li")].find(li=>li.textContent.includes("セキュリティ対策ソフト")).querySelector("button[aria-label^=年払い]").click()');
     await ev('document.querySelectorAll("#list .it input")[0].click()');
     await ev('document.querySelectorAll("details").forEach(d=>d.open=true)'); await sleep(100);
     ok(await ev('document.documentElement.scrollWidth<=375'), scheme + ' 375px 横スクロールなし ' + await ev('document.documentElement.scrollWidth'));

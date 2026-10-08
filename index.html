@@ -82,7 +82,9 @@
   .sub li:first-child { border-top: 0; }
   .once { list-style: none; margin: 0; padding: 0; }
   .once li { display: grid; grid-template-columns: minmax(0,1fr); gap: 6px; }
-  .once .add { width: 100%; }
+  .once .acts { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; }
+  .once .add { width: 100%; font-size: 14px; padding: 6px 8px; }
+  .once .add:disabled { grid-column: 1 / -1; }
   .foot-notes { font-size: 13px; color: var(--ink3); margin: 12px 0 0; padding-left: 1.2em; }
   #manualBox textarea { height: 140px; margin-top: 8px; }
   .layout { display: block; }
@@ -93,7 +95,8 @@
     .it .amt { flex-direction: column; align-items: flex-end; text-align: right; }
     .it { padding: 8px 12px; row-gap: 2px; }
     .once li { grid-template-columns: minmax(0,1fr) auto; align-items: center; }
-    .once .add { width: auto; }
+    .once .acts { display: flex; gap: 8px; }
+    .once .add { width: auto; padding: 6px 12px; }
     .btns2.copy { grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 879px) { .btns2.copy { grid-template-columns: minmax(0,1fr); } }
@@ -370,7 +373,7 @@ var SBF = (function () {
   function listItems(an, manual) {
     if (!an || an.need) return [];
     var items = an.monthly.concat(an.annual);
-    an.once.forEach(function (o) { if (manual && manual[o.key]) items.push({ key: o.key, name: o.name, kind: 'annual-manual', year: o.amount, month: Math.round(o.amount / 12), count: 1 }); });
+    an.once.forEach(function (o) { var mv = manual && manual[o.key]; if (!mv) return; if (mv === 'monthly') items.push({ key: o.key, name: o.name, kind: 'monthly-manual', month: o.amount, year: o.amount * 12, count: 1 }); else items.push({ key: o.key, name: o.name, kind: 'annual-manual', year: o.amount, month: Math.round(o.amount / 12), count: 1 }); });
     return items.sort(function (a, b) { return b.month - a.month || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
   }
   function totals(items, marks) {
@@ -379,7 +382,7 @@ var SBF = (function () {
     return t;
   }
   function yen(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '円'; }
-  function kindLabel(it) { return it.kind === 'same' ? '毎月同じ額' : it.kind === 'vary' ? '金額は変わる・目安' : it.kind === 'annual-auto' ? '年払い（明細から判定）' : '年払い（自分で追加）'; }
+  function kindLabel(it) { return it.kind === 'same' ? '毎月同じ額' : it.kind === 'vary' ? '金額は変わる・目安' : it.kind === 'annual-auto' ? '年払い（明細から判定）' : it.kind === 'monthly-manual' ? '毎月（自分で追加）' : '年払い（自分で追加）'; }
   function ymLabel(ym) { return Math.floor(ym / 12) + '年' + (ym % 12 + 1) + '月'; }
   function fmtDay(t) { var d = new Date(t); return d.getUTCFullYear() + '/' + (d.getUTCMonth() + 1) + '/' + d.getUTCDate(); }
   function copyText(items, marks, onlyMarked) {
@@ -447,7 +450,7 @@ var SBF = (function () {
   function run() {
     var b = S.buildRecords(st.rows, st.det, st.cols, todayUTC());
     st.bad = b.bad; st.over = b.over; st.an = S.analyze(b.ok);
-    var keep = {}; (st.an.once || []).forEach(function (o) { if (st.manual[o.key]) keep[o.key] = 1; }); st.manual = keep;
+    var keep = {}; (st.an.once || []).forEach(function (o) { if (st.manual[o.key]) keep[o.key] = st.manual[o.key]; }); st.manual = keep;
     if (!b.ok.length) { status('読み取れる行がありませんでした（読み取れなかった行 ' + b.bad.length + '件）。「列の確認」で列を選び直すか、明細の形を確かめてください。', true); $('colBox').open = true; renderBad(); $('res').hidden = false; $('resEmpty').hidden = true; hideMain(true); return; }
     var msg = b.ok.length + '件を読み込み・' + S.ymLabel(st.an.minYm) + '〜' + S.ymLabel(st.an.maxYm) + '（' + st.an.n + 'か月分）・読み取れなかった行 ' + b.bad.length + '件' + (b.over ? '・' + S.MAX_ROWS + '行を超えた ' + b.over + '行は読んでいません' : '');
     if (st.an.outside) msg += '・期間から外れた月の行 ' + st.an.outside + '件は毎月の判定に使っていません';
@@ -481,25 +484,31 @@ var SBF = (function () {
       var s2 = el('span'); s2.appendChild(document.createTextNode('年の目安 ')); s2.appendChild(el('b', null, S.yen(it.year)));
       amt.appendChild(s1); amt.appendChild(s2); li.appendChild(amt);
       var bdg = el('div', 'bdg'); bdg.appendChild(el('span', ann ? 'ann' : null, S.kindLabel(it)));
-      if (!ann) bdg.appendChild(el('span', null, it.present + '/' + st.an.n + 'か月'));
+      if (!ann && it.kind !== 'monthly-manual') bdg.appendChild(el('span', null, it.present + '/' + st.an.n + 'か月'));
       if (it.kind === 'annual-auto') bdg.appendChild(el('span', null, it.count + '回'));
       if (it.multi) bdg.appendChild(el('span', null, '同じ月に複数回'));
-      if (it.kind === 'annual-manual') { var rm = el('button', 'ghost', '外す'); rm.type = 'button'; rm.className = 'ghost rm'; rm.setAttribute('aria-label', '年払いから外す: ' + it.name); rm.addEventListener('click', function () { delete st.manual[it.key]; delete st.marks[it.key]; render(); }); bdg.appendChild(rm); }
+      if (it.kind === 'annual-manual' || it.kind === 'monthly-manual') { var rm = el('button', 'ghost', '外す'); rm.type = 'button'; rm.className = 'ghost rm'; rm.setAttribute('aria-label', (it.kind === 'monthly-manual' ? '毎月の支払いから外す: ' : '年払いから外す: ') + it.name); rm.addEventListener('click', function () { delete st.manual[it.key]; delete st.marks[it.key]; render(); }); bdg.appendChild(rm); }
       li.appendChild(bdg); ul.appendChild(li);
     });
     $('noneMsg').hidden = st.items.length > 0;
-    var monthlyCount = st.an.monthly.length, annCount = st.items.length - monthlyCount;
+    var monthlyCount = st.items.filter(function (it) { return it.kind === 'same' || it.kind === 'vary' || it.kind === 'monthly-manual'; }).length, annCount = st.items.length - monthlyCount;
     $('listCount').textContent = '毎月 ' + monthlyCount + '件' + (annCount ? '・年払い ' + annCount + '件' : '') + '（月あたりの大きい順）';
     // ときどき
     var sl = $('someList'); sl.textContent = ''; $('someSum').textContent = 'ときどき出ている支払い ' + st.an.some.length + '件';
     st.an.some.forEach(function (s) { sl.appendChild(el('li', null, s.name + '　' + s.present + '/' + st.an.n + 'か月・' + s.amounts.map(S.yen).join('／'))); });
     // 1回だけ
-    var ol = $('onceList'); ol.textContent = ''; $('onceSum').textContent = '1回だけの支払い ' + st.an.once.length + '件（年払いならここから加える）';
+    var ol = $('onceList'); ol.textContent = ''; $('onceSum').textContent = '1回だけの支払い ' + st.an.once.length + '件（毎月の支払い・年払いなら、ここから加える）';
     st.an.once.slice(0, 300).forEach(function (o) {
       var li = el('li'); li.appendChild(el('div', null, S.fmtDay(o.last) + '　' + o.name + '　' + S.yen(o.amount) + (o.count > 1 ? '（同じ月に' + o.count + '回・直近の額）' : '')));
-      var b = el('button', 'ghost add', st.manual[o.key] ? '加えました（一覧にあります）' : '年払いとして加える'); b.type = 'button'; b.disabled = !!st.manual[o.key];
-      b.addEventListener('click', function () { st.manual[o.key] = 1; render(); });
-      li.appendChild(b); ol.appendChild(li);
+      var acts = el('div', 'acts'), mv = st.manual[o.key];
+      if (mv) { var done = el('button', 'ghost add', '加えました（' + (mv === 'monthly' ? '毎月' : '年払い') + 'の一覧にあります）'); done.type = 'button'; done.disabled = true; acts.appendChild(done); }
+      else {
+        [['monthly', '毎月として加える'], ['annual', '年払いとして加える']].forEach(function (p) {
+          var b = el('button', 'ghost add', p[1]); b.type = 'button'; b.setAttribute('aria-label', p[1] + ': ' + o.name);
+          b.addEventListener('click', function () { st.manual[o.key] = p[0]; render(); }); acts.appendChild(b);
+        });
+      }
+      li.appendChild(acts); ol.appendChild(li);
     });
     hideMain(false); renderBand();
   }
