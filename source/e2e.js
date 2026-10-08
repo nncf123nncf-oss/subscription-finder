@@ -32,7 +32,7 @@ const wf = (name, buf) => { const p = path.join(TMP, name); fs.writeFileSync(p, 
   const txt = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.textContent||''`);
   const click = sel => ev(`document.querySelector(${JSON.stringify(sel)}).click()`);
   const cnt = sel => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
-  const vis = sel => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});return !!e && !e.closest('[hidden]') && e.getClientRects().length>0})()`);
+  const vis = sel => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});return !!e && e.getClientRects().length>0 && getComputedStyle(e).visibility!=='hidden'})()`);
 
   await open(1000, 900);
   ok(await ev('getComputedStyle(document.querySelector(".layout")).display') === 'grid', '880px以上は2カラム');
@@ -78,6 +78,8 @@ const wf = (name, buf) => { const p = path.join(TMP, name); fs.writeFileSync(p, 
   await pick(wf('big.csv', Buffer.alloc(2 * 1024 * 1024 + 10, 0x41))); ok((await txt('#status')).includes('2MB'), '2MB超');
   // 1か月だけ
   await ev('document.getElementById("paste").value="2026/09/01,A,100\\n2026/09/05,B,200"'); await click('#load'); ok((await txt('#status')).includes('2か月分以上'), '1か月は案内'); ok(!(await vis('#list')), '1か月は一覧なし');
+  await click('#sample'); await sleep(100); await ev('document.getElementById("paste").value="2026/07/01,A,100\\n2026/07/05,B,200"'); await click('#load'); await sleep(100);
+  ok(!(await vis('#band')) && !(await vis('#list')) && !(await vis('.listhead')), 'サンプルの後に1か月を読むと、前の結果が残らない');
   // XSS
   await ev('document.getElementById("paste").value="2026/07/01,<img src=x onerror=window.__x=1>,100\\n2026/08/01,<img src=x onerror=window.__x=1>,100"'); await click('#load'); await sleep(100);
   ok(await ev('window.__x===undefined') && (await txt('#list')).includes('<img'), 'XSSは文字表示');

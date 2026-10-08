@@ -21,6 +21,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.6; }
   main { max-width: 1120px; margin: 0 auto; padding: 16px 16px 32px; }
@@ -415,7 +416,7 @@ var SBF = (function () {
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function todayUTC() { var d = new Date(); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); }
   function status(msg, err) { var s = $('status'); s.hidden = !msg; s.textContent = msg || ''; s.classList.toggle('err', !!err); }
-  function reset() { st = { rows: null, det: null, cols: null, an: null, bad: [], over: 0, marks: {}, manual: {}, items: [] }; $('res').hidden = true; $('resEmpty').hidden = false; $('colBox').hidden = true; $('manualBox').hidden = true; }
+  function reset() { st = { rows: null, det: null, cols: null, an: null, bad: [], over: 0, marks: {}, manual: {}, items: [] }; ['list', 'someList', 'onceList'].forEach(function (id) { $(id).textContent = ''; }); $('res').hidden = true; $('resEmpty').hidden = false; $('colBox').hidden = true; $('manualBox').hidden = true; }
 
   function fillSelects() {
     var opts = [];
