@@ -76,6 +76,16 @@ const wf = (name, buf) => { const p = path.join(TMP, name); fs.writeFileSync(p, 
   await pick(wf('img.png', Buffer.from([0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0]))); ok((await txt('#status')).includes('文字のファイルではない'), 'PNG拒否');
   await pick(wf('empty.csv', Buffer.alloc(0))); ok((await txt('#status')).includes('空'), '空ファイル');
   await pick(wf('big.csv', Buffer.alloc(2 * 1024 * 1024 + 10, 0x41))); ok((await txt('#status')).includes('2MB'), '2MB超');
+  // 複数ファイル（PayPayカードに似た形の架空データ。月ごとに1ファイル、見出し行つき）
+  async function pickMany(files) { const doc = (await send('DOM.getDocument')).result.root.nodeId; const q = (await send('DOM.querySelector', { nodeId: doc, selector: '#file' })).result.nodeId; await send('DOM.setFileInputFiles', { nodeId: q, files }); await sleep(700); }
+  const PH = '"利用日/キャンセル日","利用店名・商品名","利用者","決済方法","支払区分","利用金額","手数料","支払総額"\n';
+  const mon = m => PH + `"2026/${m}/3","ノートクラウド","本人*","カード","1回","1200","0","1200"\n"2026/${m}/12","動画みほん館","本人*","カード","1回","990","0","990"\n` + (m === 8 ? `"2026/8/14","駅前ベーカリー","本人*","カード","1回","480","0","480"\n` : '');
+  await pickMany([wf('m7.csv', mon(7)), wf('m8.csv', mon(8)), wf('m9.csv', mon(9)), wf('m9copy.csv', mon(9))]);
+  ok((await txt('#status')).includes('4ファイルをまとめて読み込み') && (await txt('#status')).includes('同じ中身のファイル 1件'), '複数ファイル: 件数と重複の案内 ' + (await txt('#status')).slice(0, 80));
+  ok((await txt('#status')).includes('3か月分') && (await txt('#status')).includes('読み取れなかった行 0件'), '複数ファイル: 3か月分・見出し行は読み取れない行に数えない');
+  ok(await cnt('#list .it') === 2 && (await txt('#list')).includes('ノートクラウド') && (await txt('#list')).includes('動画みほん館') && !(await txt('#list')).includes('ベーカリー'), '複数ファイル: 毎月2件');
+  ok((await txt('#list')).includes('1,200円') && !(await txt('#list')).includes('2,400円'), '複数ファイル: 同じファイルを2回選んでも二重に数えない');
+  await pickMany([wf('ok.csv', mon(7)), wf('bad.png', Buffer.from([0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0]))]); ok((await txt('#status')).includes('bad.png') && !(await vis('#list')), '複数ファイル: 1つでも読めなければ止めて名前を出す');
   // 1か月だけ
   await ev('document.getElementById("paste").value="2026/09/01,A,100\\n2026/09/05,B,200"'); await click('#load'); ok((await txt('#status')).includes('2か月分以上'), '1か月は案内'); ok(!(await vis('#list')), '1か月は一覧なし');
   await click('#sample'); await sleep(100); await ev('document.getElementById("paste").value="2026/07/01,A,100\\n2026/07/05,B,200"'); await click('#load'); await sleep(100);

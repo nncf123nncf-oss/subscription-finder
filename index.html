@@ -122,8 +122,8 @@
         <label class="lb" for="paste">明細の文字を貼る（CSVの中身や、明細画面からコピーした表）</label>
         <textarea id="paste" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="例: 2026/07/03,ノートクラウド,1200"></textarea>
         <div class="btns">
-          <label class="filebtn" for="file" id="fileLabel">CSVファイルを選ぶ</label>
-          <input type="file" id="file" class="vh">
+          <label class="filebtn" for="file" id="fileLabel">CSVファイルを選ぶ（複数可）</label>
+          <input type="file" id="file" class="vh" multiple>
           <button type="button" class="primary" id="load">読み込む</button>
         </div>
         <div class="btns2">
@@ -516,25 +516,45 @@ var SBF = (function () {
   ['colDate', 'colName', 'colAmt'].forEach(function (id, i) {
     $(id).addEventListener('change', function () { st.cols[['date', 'name', 'amt'][i]] = parseInt($(id).value, 10); st.marks = {}; st.manual = {}; run(); });
   });
+  // 1ファイルを文字にする。読めないときは理由の文字列で失敗させる
+  function decodeFile(f) {
+    return new Promise(function (resolve, reject) {
+      if (f.size > 2 * 1024 * 1024) { reject('ファイルが大きすぎます（1ファイル2MBまで）'); return; }
+      if (f.size === 0) { reject('ファイルが空です'); return; }
+      var r = new FileReader();
+      r.onerror = function () { reject('ファイルを読み込めませんでした'); };
+      r.onload = function () {
+        var u = new Uint8Array(r.result), head = u.subarray(0, 1024);
+        if ((u[0] === 0xFF && u[1] === 0xFE) || (u[0] === 0xFE && u[1] === 0xFF)) { try { resolve(new TextDecoder(u[0] === 0xFF ? 'utf-16le' : 'utf-16be').decode(u).replace(/^﻿/, '')); } catch (e) { reject('UTF-16の文字ファイルを読めませんでした'); } return; }
+        var bin = (u[0] === 0x89 && u[1] === 0x50) || (u[0] === 0x50 && u[1] === 0x4B) || (u[0] === 0xFF && u[1] === 0xD8) || (u[0] === 0x25 && u[1] === 0x50 && u[2] === 0x44) || Array.prototype.indexOf.call(head, 0) >= 0;
+        if (bin) { reject('文字のファイルではないようです（画像・ZIP・PDFなど）。CSVファイルを選んでください'); return; }
+        try { resolve(new TextDecoder('utf-8', { fatal: true }).decode(u).replace(/^﻿/, '')); }
+        catch (e) { try { resolve(new TextDecoder('shift_jis').decode(u)); } catch (e2) { reject('文字コードが読めませんでした'); } }
+      };
+      r.readAsArrayBuffer(f);
+    });
+  }
   $('file').addEventListener('change', function () {
-    var f = $('file').files && $('file').files[0]; if (!f) return;
-    if (f.size > 2 * 1024 * 1024) { reset(); status('ファイルが大きすぎます（2MBまで）。読み込んでいません。', true); $('file').value = ''; return; }
-    if (f.size === 0) { reset(); status('ファイルが空です。', true); $('file').value = ''; return; }
+    var fs = Array.prototype.slice.call($('file').files || []); $('file').value = '';
+    if (!fs.length) return;
+    if (fs.length > 36) { reset(); status('一度に選べるのは36ファイルまでです。', true); return; }
     status('読み込み中…', false);
-    var r = new FileReader();
-    r.onerror = function () { reset(); status('ファイルを読み込めませんでした。', true); };
-    r.onload = function () {
-      var u = new Uint8Array(r.result), head = u.subarray(0, 1024);
-      if ((u[0] === 0xFF && u[1] === 0xFE) || (u[0] === 0xFE && u[1] === 0xFF)) { try { $('paste').value = new TextDecoder(u[0] === 0xFF ? 'utf-16le' : 'utf-16be').decode(u).replace(/^\uFEFF/, ''); $('file').value = ''; loadText($('paste').value); } catch (e) { reset(); status('UTF-16の文字ファイルを読めませんでした。', true); } return; }
-      var bin = (u[0] === 0x89 && u[1] === 0x50) || (u[0] === 0x50 && u[1] === 0x4B) || (u[0] === 0xFF && u[1] === 0xD8) || (u[0] === 0x25 && u[1] === 0x50 && u[2] === 0x44) || Array.prototype.indexOf.call(head, 0) >= 0;
-      if (bin) { reset(); status('文字のファイルではないようです（画像・ZIP・PDFなど）。CSVファイルを選んでください。', true); $('file').value = ''; return; }
-      var text;
-      try { text = new TextDecoder('utf-8', { fatal: true }).decode(u); }
-      catch (e) { try { text = new TextDecoder('shift_jis').decode(u); } catch (e2) { reset(); status('文字コードが読めませんでした。', true); return; } }
-      $('paste').value = text.replace(/^\uFEFF/, ''); $('file').value = '';
+    Promise.all(fs.map(function (f) { return decodeFile(f).then(function (t) { return { name: f.name, text: t }; }, function (why) { return { name: f.name, err: why }; }); })).then(function (rs) {
+      var errs = rs.filter(function (x) { return x.err; });
+      if (errs.length) { reset(); status(errs.map(function (x) { return (fs.length > 1 ? x.name + ': ' : '') + x.err; }).join('／') + '。読み込んでいません。', true); return; }
+      // 2つ目以降のファイルの見出し行（1つ目と同じ1行目）は外す。同じ中身のファイルは1回だけ使う
+      var firstLine = function (t) { return (t.replace(/\r\n?/g, '\n').split('\n').filter(function (l) { return l.trim() !== ''; })[0] || '').trim(); };
+      var head0 = firstLine(rs[0].text), seen = {}, parts = [], dup = 0;
+      rs.forEach(function (x, i) {
+        var t = x.text.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+        if (seen[t]) { dup++; return; } seen[t] = 1;
+        if (i > 0 && head0 && firstLine(t) === head0) t = t.replace(/^\n*[^\n]*\n?/, '');
+        parts.push(t);
+      });
+      $('paste').value = parts.join('\n');
       loadText($('paste').value);
-    };
-    r.readAsArrayBuffer(f);
+      if (fs.length > 1) { var s = $('status'); s.textContent = fs.length + 'ファイルをまとめて読み込み' + (dup ? '（同じ中身のファイル ' + dup + '件は1回だけ使いました）' : '') + '・' + s.textContent; }
+    });
   });
   function copy(only) {
     if (only && !Object.keys(st.marks).some(function (k) { return st.items.some(function (it) { return it.key === k; }); })) { showManual('「見直したい」の印がまだありません。', ''); return; }
